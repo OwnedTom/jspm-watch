@@ -44,7 +44,7 @@
     "time-stamp": "^1.0.0"
   },
   "peerDependencies": {
-    "jspm": ">= 0.16.12"
+    "jspm": ">= 0.16.12 || 0.17.0-beta.44"
   },
   "devDependencies": {
     "chai": "^3.5.0",
