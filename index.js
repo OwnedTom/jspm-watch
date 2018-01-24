@@ -72,8 +72,9 @@ class Watcher {
         };
 
         this._setupOptions(options.app, this._conf.app);
-
-        this._watchExpression = [this._jspmConf.configFile, '!' + this._jspmConf.packages + '/**/*'];
+        this._localToGlobal = options.localToGlobal || {};
+        // , '!' + this._jspmConf.packages + '/**/*'
+        this._watchExpression = [this._jspmConf.configFile];
 
         if (!this._conf.app.watch) {
 
@@ -192,7 +193,7 @@ class Watcher {
             id: promiseId,
             method: method,
             arguments: Array.prototype.slice.call(arguments, this._progressCall.length)
-        });
+        }, () => {});
 
         return promise;
 
@@ -344,6 +345,14 @@ class Watcher {
 
     }
 
+    _resolveLinkedModuleName (filepath, baseDir) {
+        let link = this._resolveSymLink(filepath);
+        let moduleVar = _.find(_.toPairs(this.localToGlobal), (val) => {
+            return filepath.indexOf(val[0]) >= 0;
+        });
+        return this._resolveModuleName(moduleVar[1], baseDir);
+    }
+
     _paramPackageJson(){
         
         if(!this.pjson){        
@@ -426,7 +435,7 @@ class Watcher {
                 mangle: false,
                 sourceMaps: true,
                 lowResSourceMaps: true
-            }, source.buildOptions || {}, { sfx: false });
+            }, source.buildOptions || {});
             destination.ignore = source.ignore;
 
         } else {
@@ -593,6 +602,7 @@ class Watcher {
         this._watcher = chokidar.watch(this._watchExpression, {
                 ignoreInitial: true,
                 persistent: true,
+                followSymlinks: true,
                 usePolling: this._usePolling,
                 ignored: (filepath) => {
 
@@ -684,7 +694,8 @@ class Watcher {
         }
 
         let isSpecFile = this._isSpecFile(filepath);
-
+        let isSymLinked = this._isSymLinked(filepath);
+        let isTempFile = this._isTempFile(filepath);
         if (this._conf.tests.skipBuild && isSpecFile) {
 
             this._debug('File is unit test, unit test build is disabled, skipping bundle');
@@ -695,7 +706,23 @@ class Watcher {
 
         }
 
-        if (!this._conf.tests.skipBuild && isSpecFile) {
+        if (!this._conf.app.skipBuild && isSymLinked && !isTempFile) {
+            moduleName = this._resolveLinkedModuleName(filepath, this._conf.app.inputDir);
+
+            this._invalidate(moduleName).then(invalidateResult => {
+
+                defer.resolve({
+                    moduleName: moduleName,
+                    event: event,
+                    bundleType: 'app',
+                    buildState: this._appBuildState,
+                    shouldBundle: true,
+                    messages: this._messages.app
+                });
+
+            });
+        }
+        else if (!this._conf.tests.skipBuild && isSpecFile) {
 
             moduleName = this._resolveModuleName(filepath, this._conf.tests.inputDir);
 
@@ -989,8 +1016,8 @@ class Watcher {
             this._progressCall('start', progressOptions);
 
         }
-
-        return this._jspmWorker.execute('bundle', {
+        let action = options.buildOptions.sfx ? 'build' : 'bundle';
+        return this._jspmWorker.execute(action, {
             input: this._resolveModuleName(options.input, options.inputDir),
             output: options.output,
             buildOptions: options.buildOptions
@@ -1021,7 +1048,7 @@ class Watcher {
             .catch(error => {
 
                 state.hasError = true;
-                this._logError(messages.buildFail.format({ error: chalk.red(error) }));
+                this._logError(messages.buildFail.format({ error: chalk.red(JSON.stringify(error)) }));
 
                 if (state.entireBuild) {
 
@@ -1053,6 +1080,17 @@ class Watcher {
 
     }
 
+    _isSymLinked (filePath) {
+        return this._resolveSymLink(filePath) !== undefined;
+    }
+
+    _resolveSymLink (filePath) {
+        return _.find(this._symLinks, (val) => filePath.indexOf(val.resolved) >= 0);
+    }
+
+    _isTempFile (filePath) {
+        return filePath.indexOf('___jb_tmp___') >= 0
+    }
 }
 
 module.exports = Watcher;
