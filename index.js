@@ -347,10 +347,10 @@ class Watcher {
 
     _resolveLinkedModuleName (filepath, baseDir) {
         let link = this._resolveSymLink(filepath);
-        let moduleVar = _.find(_.toPairs(this.localToGlobal), (val) => {
-            return filepath.indexOf(val[0]) >= 0;
+        let moduleVar = _.find(_.toPairs(this._localToGlobal), (val) => {
+            return filepath.indexOf(val[1]) >= 0;
         });
-        return this._resolveModuleName(moduleVar[1], baseDir);
+        return this._resolveModuleName(moduleVar[0], baseDir);
     }
 
     _paramPackageJson(){
@@ -695,6 +695,7 @@ class Watcher {
 
         let isSpecFile = this._isSpecFile(filepath);
         let isSymLinked = this._isSymLinked(filepath);
+        console.log(`IsSymLinked: ${isSymLinked}`);
         let isTempFile = this._isTempFile(filepath);
         if (this._conf.tests.skipBuild && isSpecFile) {
 
@@ -707,9 +708,10 @@ class Watcher {
         }
 
         if (!this._conf.app.skipBuild && isSymLinked && !isTempFile) {
+            console.log(moduleName);
             moduleName = this._resolveLinkedModuleName(filepath, this._conf.app.inputDir);
 
-            this._invalidate(moduleName).then(invalidateResult => {
+            this._invalidate('*').then(invalidateResult => {
 
                 defer.resolve({
                     moduleName: moduleName,
